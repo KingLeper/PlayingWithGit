@@ -1,0 +1,312 @@
+;Alex Manus
+;Assignment 8
+;C311
+;10/17/06
+
+
+;1
+(define apply-k1
+   (lambda (k v)
+     (pmatch k
+       [(empty-k) () v]
+       [(other-k ,n ,k) () (apply-k1 k (cons n v))])))
+
+(define other-k1
+  (lambda (n k)
+    `(other-k ,n ,k)))
+
+(define rembero
+  (lambda (x ls k)
+      (cond
+        ((null? ls) (apply-k1 k '()))
+        ((eq? (car ls) x) (apply-k1 k (cdr ls)))
+        (else (rembero x (cdr ls)
+                (other-k1 (car ls) k))))))
+
+(define rember
+  (lambda (x ls k)
+    (call/cc (lambda (jumpout)
+               (tramp (rember x ls k))))))
+
+(define rembert
+  (lambda (x ls k)
+    (lambda ()
+      (cond
+        ((null? ls) (apply-k1 k '()))
+        ((eq? (car ls) x) (apply-k1 k (cdr ls)))
+        (else (rembert x (cdr ls)
+                (other-k1 (car ls) k)))))))
+
+;2
+(define multi-rember
+  (lambda (x ls k)
+    (cond
+      ((null? ls) (apply-k1 k '()))
+      ((eq? (car ls) x) (multi-rember x (cdr ls) k))
+      (else (multi-rember x (cdr ls)
+                (other-k1 (car ls) k))))))
+
+
+;3
+(define inner-k3
+  (lambda (n k)
+    `(inner-k ,n ,k)))
+
+(define outer-k3
+  (lambda (x ls k)
+    `(outer-k ,x ,ls ,k)))
+
+(define rember* 
+  (lambda (x ls k)
+    (set! *x x)
+    (set! *ls ls)
+    (set! *k k)
+    (rember*r)))
+
+(define rember*r
+  (lambda () ;x ls k
+    (cond
+      [(null? *ls) (set! *v '()) (apply-k3r)]
+      [(pair? (car *ls)) (set! *k (outer-k3 *x (cdr *ls) *k))
+                             (set! *ls (car *ls))                    
+                             (rember*r)]
+      [(eq? (car *ls) *x) (set! *ls (cdr *ls))
+                         (rember*r)]
+      [else (set! *k (inner-k3 (car *ls) *k))
+            (set! *ls (cdr *ls))
+            (rember*r)])))
+
+(define apply-k3r
+   (lambda ()
+     (pmatch *k
+       [(empty-k) () *v]
+       [(inner-k ,n ,k) () (set! *k k)
+                           (set! *v (cons n *v))
+                           (apply-k3r)]
+       [(outer-k ,x ,ls ,k) () (set! *k (inner-k3 *v k))
+                               (set! *x x)
+                               (set! *ls ls)
+                               (rember*r)])))
+
+(define *x `0)
+(define *ls `6)
+(define *k `2)
+(define *v `3)
+
+;4
+(define apply-k4
+   (lambda (k v)
+     (pmatch k
+       [(empty-k) () v]
+       [(inner-k ,n ,k) ()  (let ((dfirst (add1 n))
+                                  (drest v))
+                              (apply-k4 k (if (< dfirst drest)
+                                            drest
+                                            dfirst)))]
+        [(outer-k ,s ,k) () (depth s (inner-k4 v k))])))
+
+(define inner-k4
+  (lambda (n k)
+    `(inner-k ,n ,k)))
+
+(define outer-k4
+  (lambda (s k)
+    `(outer-k ,s ,k)))
+
+(define deptho
+  (lambda (s k)
+    (cond
+      [(null? s) (apply-k4 k 1)]
+      [(pair? (car s))
+       (depth (car s)
+           (outer-k4 (cdr s) k))]
+      [else (deptho (cdr s) k)])))
+
+(define depth
+  (lambda (ls k)
+    (set! *ls ls)
+    (set! *k k)
+    (depthr)))
+
+(define depthr
+  (lambda () ;ls k
+    (cond
+      [(null? *ls) (set! *v 1)
+                  (apply-k4r)]
+      [(pair? (car *ls)) (set! *k (outer-k4 (cdr *ls) *k))
+                         (set! *ls (car *ls))
+                         (depthr)]
+      [else (set! *ls (cdr *ls))
+            (depthr)])))
+
+
+
+(define apply-k4r
+   (lambda () ;k v
+     (pmatch *k
+       [(empty-k) () *v]
+       [(inner-k ,n ,k) () (set! n (add1 n))
+                           (set! *k k)
+                           (if (< n *v)
+                               (set! *v v)
+                               (set! *v n))
+                           (apply-k4r)]
+        [(outer-k ,ls ,k) () (set! *k (inner-k4 *v k))
+                            (set! *ls ls)
+                            (depthr)])))
+
+(define *ls `0)
+(define *v `1)
+(define *k `2)
+
+;5
+(define other-k5
+  (lambda (n k)
+      `(other-k ,n ,k)))
+
+(define A
+  (lambda (n m k)
+    (set! *n n)
+    (set! *m m)
+    (set! *k k)
+    (Ar)))
+
+(trace-define Ar ;the pirate function
+  (lambda () ;n m k
+    (cond
+      [(zero? *n) (set! *m (add1 *m))
+                 (apply-k5r)]
+      [(zero? *m) (set! *n (sub1 *n))
+                 (set! *m 1)
+                 (Ar)]
+      [else (set! *k (other-k5 (sub1 *n) *k))
+            (set! *m (sub1 *m))
+            (Ar)])))
+
+(define apply-k5r
+   (lambda () ;k v?
+     (pmatch *k
+       [(empty-k) () *m]
+       [(other-k ,n ,k) () (set! *k k)
+                           (set! *n n)
+                           (Ar)])))
+
+(define *n `0)
+(define *m `1)
+(define *k `2)
+
+
+;6
+;This does not appear to ever create new k's.
+
+(define apply-k6
+  (lambda (k v)
+    (pmatch k
+      [(empty-k)() v])))
+
+(define apply-k6r
+  (lambda () ;k v?
+    (pmatch *k
+      [(empty-k)() *n]
+      [(other-k ,n ,k) () n])))
+
+(define C
+  (lambda (n k)
+    (set! *n n)
+    (set! *k k)
+    (Cr)))
+
+(define Cr
+  (lambda () ;n k
+    (cond
+      [(zero? (sub1 *n)) (set! *k (other-k6 1 *k))
+                        (apply-k6r)]
+      [(even? *n) (set! *n (quotient *n 2))
+                 (Cr)]
+      [else (set! *n (add1 (* 3 n)))
+            (Cr)])))
+
+(define *n `0)
+(define *k `1)
+		
+;7
+(trace-define apply-k7
+   (lambda (k v)
+     (pmatch k
+       [(empty-k) () v]
+       [(inner-k ,v* ,k) () (apply-k7 k (cons v v*))]
+       [(middle-k ,ls ,k) () (m (car ls) (inner-k7 v k))]
+       [(outer-k ,ls ,k) () (v (cdr ls) (middle-k7 ls k))])))
+
+(define inner-k7
+  (lambda (v k)
+    `(inner-k ,v ,k)))
+
+(define middle-k7
+  (lambda (ls k)
+    `(middle-k ,ls ,k)))
+
+(define outer-k7
+  (lambda (ls k)
+      `(outer-k ,ls ,k)))
+
+(define Mo
+  (lambda (f k)
+    (k (lambda (ls k)
+         (cond
+           ((null? ls) (k '()))
+           (else (Mo f
+                   (lambda (p)
+                     (p (cdr ls)
+                       (lambda (d)
+                         (f (car ls)
+                           (lambda (a)
+                             (k (cons a d))))))))))))))
+
+(trace-define M
+  (lambda (f k)
+    (lambda (ls k)
+      (cond
+        [(null? ls) (apply-k7 k '())]
+        [else (M f (outer-k7 k ls))]))))
+
+
+;Helpers
+;(define apply-k
+;   (lambda (k v)
+;     (pmatch k
+;       [(empty-k) () v]
+;       [(other-k ,n ,k) () (apply-k k (* v n))])))
+
+;(define other-k
+;  (lambda (n k)
+;    `(other-k ,n ,k)))
+
+;(define outer-k
+;  (lambda (n k)
+;    `(outer-k ,n ,k)))
+
+;(define inner-k
+;  (lambda (p k)
+;    `(inner-k ,p ,k)))
+
+(define empty-k
+    `(empty-k))
+  
+(define tramp
+  (lambda (th)
+    (tramp(th))))
+
+
+
+
+
+
+
+
+
+
+
+
+
+;END

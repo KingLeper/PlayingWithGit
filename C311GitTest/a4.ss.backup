@@ -1,0 +1,161 @@
+;Alex Manus
+;C311
+;9/19/06
+
+(define-syntax test
+    (syntax-rules ()
+      ((_ title tested-expression expected-result)
+       (let* ((expected expected-result)
+              (produced tested-expression))
+         (if (equal? expected produced)
+             (printf "~s works!\n" title)
+             (error
+              'test
+              "Failed ~s: ~a\nExpected: ~a\nComputed: ~a"
+              title 'tested-expression expected produced))))))
+
+;1
+(define empty-env
+  (lambda ()
+    (lambda (x)
+      (error 'empty-env "Unbound variable ~s\n" x))))
+
+(define apply-env
+  (lambda (env x)
+    (env x)))      
+      
+(define extend-env
+  (lambda (x v env)
+    (lambda (x^)
+      (if (eq? x x^)
+          v
+          (env x^)))))
+
+(define make-proc
+  (lambda (body x env)
+    (lambda (a env*)
+      (value-of body (extend-env x a env)))))
+
+(define make-proc-d
+  (lambda (body x env*)
+    (lambda (a env)
+      (value-of body (extend-env x a env)))))
+
+(define apply-proc
+  (lambda (rator rand env)
+    (rator rand env)))
+                 	  
+(define value-of
+  (lambda (exp env)
+    (pmatch exp
+      [,x (boolean? x) x]
+      [,x (number? x) x]
+      [,x (symbol? x) (apply-env env x)]
+      [(zero? ,n) () (zero? (value-of n env))]
+      [(sub1 ,n) () (sub1 (value-of n env))]
+      [(+ ,n ,m) () (+ (value-of n env) (value-of m env))]
+      [(* ,n ,m) () (* (value-of n env) (value-of m env))]
+      [(if ,t ,c ,a) () (if (value-of t env)
+                            (value-of c env)
+                            (value-of a env))]
+      [(let ((,x ,v)) ,body) () (value-of body
+                                          (extend-env x (value-of v env) env))]
+      [(dlambda (,x) ,body) () (make-proc-d body x env)]
+      [(lambda (,x) ,body) () (make-proc body x env)]
+      [(,rator ,rand) () (apply-proc (value-of rator env) (value-of rand env) env)])))
+
+(define let-static
+  '(let ([x 2])
+     (let ([f (lambda (e) x)])
+       (let ([x 5])
+         (f 0)))))
+
+(define let-dynamic
+  '(let ([x 2])
+     (let ([f (dlambda (e) x)])
+       (let ([x 5])
+         (f 0)))))
+
+
+(test "let-test-static" (value-of let-static (empty-env)) 2)
+
+(test "let-test-dynamic" (value-of let-dynamic (empty-env)) 5)
+
+
+;2
+(define extend-env*
+  (lambda (b* env)
+    (cond
+      [(null? b*) env]
+      [else (let ([x (caar b*)]
+                  [v (cadar b*)])
+              (extend-env* (cdr b*) (extend-env x v env)))])))
+
+(define make-proc*
+  (lambda (body x* env)
+    (lambda (a* env*)
+      (value-of body (extend-env* (map list x* a*) env)))))
+
+(define make-proc-d*
+  (lambda (body x* env*)
+    (lambda (a* env)
+      (value-of body (extend-env* (map list x* a*) env)))))
+	      
+(define value-of
+  (lambda (exp env)
+    (pmatch exp
+      [,x (boolean? x) x]
+      [,x (number? x) x]
+      [,x (and (list? x) (null? x)) x]
+      [,x (symbol? x) (apply-env env x)]
+      [(zero? ,n) () (zero? (value-of n env))]
+      [(sub1 ,n) () (sub1 (value-of n env))]
+      [(+ ,n ,m) () (+ (value-of n env) (value-of m env))]
+      [(* ,n ,m) () (* (value-of n env) (value-of m env))]
+      [(car ,l) () (car (value-of l env))]
+      [(cons ,a ,l) () (cons (value-of a env) (value-of l env))]
+      [(cdr ,l) () (cdr (value-of l env))]
+      [(null? ,o) () (null? (value-of o env))]
+      [(if ,t ,c ,a) () (if (value-of t env)
+                            (value-of c env)
+                            (value-of a env))]
+      [(let ((,a ,b)) ,body) ()
+       (value-of body (extend-env a (value-of b env) env))]
+      [(dlambda ,x* ,body) () (make-proc-d* body x* env)]
+      [(lambda ,x* ,body) () (make-proc* body x* env)]
+      [(,rator . ,rand*) () (apply-proc
+                              (value-of rator env)
+                              (map (lambda (rand) (value-of rand env))rand*) env)])))
+
+
+(define map-test-static
+  '(let ([map (lambda (map f ls)
+                (if (null? ls)
+                    ()
+                    (cons (f (car ls)) (map map f (cdr ls)))))])
+     (let ([ls (cons 1 (cons 2 (cons 3 (cons 4 ()))))])
+       (map map (lambda (x) (cons x ls)) ls))))
+
+(define map-test-dynamic
+  '(let ([map (dlambda (map f ls)
+                (if (null? ls)
+                    ()
+                    (cons (f (car ls)) (map map f (cdr ls)))))])
+     (let ([ls (cons 1 (cons 2 (cons 3 (cons 4 ()))))])
+       (map map (dlambda (x) (cons x ls)) ls))))       
+       
+(test "map-static" (value-of map-test-static (empty-env))
+      '((1 1 2 3 4) (2 1 2 3 4) (3 1 2 3 4) (4 1 2 3 4)))
+
+(test "map-dynamic" (value-of map-test-dynamic (empty-env))
+      '((1 1 2 3 4) (2 2 3 4) (3 3 4) (4 4)))
+
+
+
+
+
+
+
+
+
+;END

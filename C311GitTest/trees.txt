@@ -1,0 +1,64 @@
+/*Project 3
+  Alex Manus*/
+
+#include "AVAIL.h"
+
+int insert(int, paperID, int citationTo, citationFrom);
+int delete(int paperID);
+int initializeTree();
+
+
+numOfNodes = 2048;
+Tree blankNode;
+Tree nilNode;
+blankNode.pebble = nil;
+nilNode.pebble = nil;
+nilNode.citationFrom = nil;
+nilNode.citationTo = nil;
+nil = -1;
+int initializeTree
+int i = 0;
+
+
+int insert(int paperID, int citationTo, int citationFrom)
+{
+	paper = mem[paperID];
+	if(paper.citationTo == nil)
+	{
+		if(citationTo != nil)
+		{
+			paper.citationTo = citationTo;
+		}
+		if(citationFrom != nil)
+		{
+			paper.citationFrom = citationFrom;
+		}
+		return 1;
+	}
+	printf("Paper %d Already cites %d\n", paperID , paper.citationTo);
+	return -1;
+}
+
+int initializeTree()
+{
+	memInit();
+	for(i = 0;i < numOfNodes; i++)
+	{
+		mem[newNode] = nilNode;
+	}
+	return 1;
+}
+
+
+int delete(int paperID)
+{
+	mem[paperID] = nilNode;
+}
+
+
+
+
+
+
+
+

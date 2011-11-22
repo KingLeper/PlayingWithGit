@@ -1,0 +1,39 @@
+;3
+(trace-define apply-k
+   (lambda (k v)
+     (pmatch k
+       [(empty-k) () v]
+       [(inner-k ,n ,k) () (apply-k k (cons n v))]
+       [(outer-k ,x ,ls ,k) () (rember* x ls (inner-k v k))])))
+
+(define inner-k
+  (lambda (n k)
+    `(inner-k ,n ,k)))
+
+(define outer-k
+  (lambda (x ls k)
+    `(outer-k ,x ,ls ,k)))
+
+(define rember*o
+  (lambda (x ls k)
+    (cond
+      ((null? ls) (k '()))
+      ((pair? (car ls)) (rember*o x (car ls)
+                          (lambda (a)
+                            (rember*o x (cdr ls)
+                              (lambda (d)
+                                (k (cons a k)))))))
+      ((eq? (car ls) x) (rember*o x (cdr ls) k))
+      (else (rember*o x (cdr ls)
+              (lambda (d)
+                (k (cons (car ls) d))))))))
+
+(trace-define rember*
+  (lambda (x ls k)
+    (cond
+      [(null? ls) (apply-k k '())]
+      [(pair? (car ls)) (rember* x (car ls)
+                          (outer-k x (cdr ls) k))]
+      [(eq? (car ls) x) (rember* x (cdr ls) k)]
+      [else (rember* x (cdr ls)
+              (inner-k (car ls) k))])))

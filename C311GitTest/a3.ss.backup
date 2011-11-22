@@ -1,0 +1,177 @@
+;Alex Manus
+;C311
+;9/12/06
+;Assignment 3
+
+;1
+(define eval/proc/proc
+  (lambda (exp)
+    (pmatch exp
+      [,id (symbol? id) (apply-env/proc/proc env id)]
+      [(lambda (, x), body) () (make-closure/proc/proc x body env)]
+      [(+, n , m) () (+ (eval/proc/proc n env) (eval/proc/proc m env))]
+      [(-, n ,m) () (- (eval/proc/proc n env) (eval/proc/proc m env))]
+      [(*, n ,m) () (* (eval/proc/proc n env) (eval/proc/proc m env))]
+      [(if ,test ,then ,other) () (if (eval/proc/proc test env)
+                                      (eval/proc/proc then env)
+                                      (eval/proc/proc other env))]
+      [(zero? ,n) () (zero? (eval/proc/proc n env))]
+      [,n (integer? n) () n]
+      [(,rator ,rand) () (apply-closure (eval/proc/proc rator env) 
+                           (eval/proc/proc rand env))])))
+
+(define base-env/proc/proc
+  (lambda ()
+    (lambda (r)
+      ('empty-env))))
+    
+(define extend-env/proc/proc
+  (lambda (r* val env)
+    (lambda (r)
+      (cond
+        [(eq? r r*) v]
+        [else (env r)]))))
+    
+(define apply-env/proc/proc
+  (lambda (env r)
+    (env r)))
+
+(define make-closure/proc/proc
+  (lambda (x body env)
+    (lambda (a)
+      (eval/proc/proc body
+        (lambda (id)
+          (if (eq? id x) a (env id)))))))
+
+(define apply-closure/proc/proc
+  (lambda (closure a)
+    (closure a)))
+
+;2
+(define eval/proc/ds
+  (lambda (exp)
+    (pmatch exp
+      [,id (symbol? id) (apply-env/proc/ds env id)]
+      [(lambda (, x), body) () (make-closure/proc/ds x body env)]
+      [(+, n , m) () (+ (eval/proc/ds n env) (eval/proc/ds m env))]
+      [(-, n ,m) () (- (eval/proc/ds n env) (eval/proc/ds m env))]
+      [(*, n ,m) () (* (eval/proc/ds n env) (eval/proc/ds m env))]
+      [(if ,test ,then ,other) () (if (eval/proc/ds test env)
+                                      (eval/proc/ds then env)
+                                      (eval/proc/ds other env))]
+      [(zero? ,n) () (zero? (eval/proc/ds n env))]
+      [,n (integer? n) () n]
+      [(,rator ,rand) () (apply-closure/proc/ds (eval/proc/ds rator env) 
+                           (eval/proc/ds rand env))])))
+
+(define base-env/proc/ds
+  (lambda ()
+      '()))
+    
+(define extend-env/proc/ds
+  (lambda (r* val env)
+    (cons (cons (r* val)) env)))
+    
+(define apply-env/proc/ds
+  (lambda (env r)
+    (cond
+      [(null? env) 'empty-env]
+      [(eq? (caar) r) (cdar env)]
+      [else (apply-env/proc/ds (cdr env))])))
+
+(define make-closure/proc/ds
+  (lambda (x body env)
+    (lambda (a)
+      (eval/proc/proc body
+        (lambda (id)
+          (if (eq? id x) a (env id)))))))
+
+(define apply-closure/proc/ds
+  (lambda (closure a)
+    (closure a)))
+
+;3
+(define eval/ds/proc
+  (lambda (exp)
+    (pmatch exp
+      [,id (symbol? id) (apply-env/ds/proc env id)]
+      [(lambda (, x), body) () (make-closure/ds/proc x body env)]
+      [(+, n , m) () (+ (eval/ds/proc n env) (eval/ds/proc m env))]
+      [(-, n ,m) () (- (eval/ds/proc n env) (eval/ds/proc m env))]
+      [(*, n ,m) () (* (eval/ds/proc n env) (eval/ds/proc m env))]
+      [(if ,test ,then ,other) () (if (eval/ds/proc test env)
+                                      (eval/ds/proc then env)
+                                      (eval/ds/proc other env))]
+      [(zero? ,n) () (zero? (eval/ds/proc n env))]
+      [,n (integer? n) () n]
+      [(,rator ,rand) () (apply-closure/ds/proc (eval/ds/proc rator env) 
+                           (eval/ds/proc rand env))])))
+
+(define base-env/ds/proc
+  (lambda ()
+    (lambda (r)
+      ('empty-env))))
+    
+(define extend-env/ds/proc
+  (lambda (r* val env)
+    (lambda (r)
+      (cond
+        [(eq? r r*) v]
+        [else (env r)]))))
+    
+(define apply-env/ds/proc
+  (lambda (env r)
+    (env r)))
+
+(define make-closure/ds/proc
+  (lambda (x body env)
+    '(closure, x, body, env)
+    '(closure, x, body, env)))
+
+(define apply-closure/ds/proc
+  (lambda (closure a)
+    (pmatch closure
+      [(closure, x, body, env) ()
+       (eval/ds/proc body (lambda (id) (if eq? id x) 'a (env id)))])))
+;4
+(define eval/ds/ds
+  (lambda (exp)
+    (pmatch exp
+      [,id (symbol? id) (apply-env/ds/ds env id)]
+      [(lambda (, x), body) () (make-closure/ds/ds x body env)]
+      [(+, n , m) () (+ (eval/ds/ds n env) (eval/ds/ds m env))]
+      [(-, n ,m) () (- (eval/ds/ds n env) (eval/ds/ds m env))]
+      [(*, n ,m) () (* (eval/ds/ds n env) (eval/ds/ds m env))]
+      [(if ,test ,then ,other) () (if (eval/ds/ds test env)
+                                      (eval/ds/ds then env)
+                                      (eval/ds/ds other env))]
+      [(zero? ,n) () (zero? (eval/ds/ds n env))]
+      [,n (integer? n) () n]
+      [(,rator ,rand) () (apply-closure/ds/ds (eval/ds/ds rator env) 
+                           (eval/ds/ds rand env))])))
+
+(define base-env/ds/ds
+  (lambda ()
+      '()))
+    
+(define extend-env/ds/ds
+  (lambda (r* val env)
+    (cons (cons (r* val)) env)))
+    
+(define apply-env/ds/ds
+  (lambda (env r)
+    (cond
+      [(null? env) 'empty-env]
+      [(eq? (caar) r) (cdar env)]
+      [else (apply-env/ds/ds (cdr env))])))
+
+(define make-closure/ds/ds
+  (lambda (x body env)
+    '(closure, x, body, env)
+    '(closure, x, body, env)))
+
+(define apply-closure/ds/ds
+  (lambda (closure a)
+    (pmatch closure
+      [(closure, x, body, env) ()
+       (eval/ds/ds body (lambda (id) (if eq? id x) 'a (env id)))])))

@@ -1,0 +1,411 @@
+;Alex Manus
+;Assignment 12
+;11/16/06
+
+(load "C:/Documents and Settings/Manus/My Documents/C311/mk.scm")
+(load "C:/Documents and Settings/Manus/My Documents/C311/mkinfer.scm")
+(cd "C:/Documents and Settings/Manus/My Documents/C311/")
+
+;I
+;1 bool
+;2 int
+;3 int
+;4 proc
+;5 proc
+;6 proc
+;7 int
+;8 int
+;9 int
+;10 int
+
+;II
+(define-syntax test-check
+  (syntax-rules ()
+    ((_ title tested-expression expected-result)
+     (let* ((expected expected-result)
+            (produced tested-expression))
+       (if (equal? expected produced)
+           (printf "~s works!\n" title)
+           (error
+             'test-check
+             "Failed ~s: ~a~%Expected: ~a~%Computed: ~a"
+             title 'tested-expression expected produced))))))
+
+(define parse
+  (lambda (e)
+    (cond
+      [(symbol? e) `(var ,e)]
+      [(number? e) `(intc ,e)]
+      [(boolean? e) `(boolc ,e)]
+      [else
+	(case (car e)
+	  [(sub1) `(sub1 ,(parse (cadr e)))]
+	  [(+) `(+ ,(parse (cadr e)) ,(parse (caddr e)))]
+	  [(*) `(* ,(parse (cadr e)) ,(parse (caddr e)))]
+	  [(car) `(car ,(parse (cadr e)))]
+	  [(cdr) `(cdr ,(parse (cadr e)))]
+	  [(cons) `(cons ,(parse (cadr e)) ,(parse (caddr e)))]
+	  [(fix) `(fix ,(parse (cadr e)))]
+	  [(zero?) `(zero? ,(parse (cadr e)))]
+	  [(if) `(if ,(parse (cadr e)) ,(parse (caddr e)) ,(parse (cadddr e)))]
+	  [(lambda) `(lambda ,(cadr e) ,(parse (caddr e)))]
+	  [else `(app ,(parse (car e)) ,(parse (cadr e)))])])))
+
+(define unparse
+  (lambda (e)
+    (if (var? e) e
+      (case (car e)
+	[(sub1) `(sub1 ,(unparse (cadr e)))]
+	[(+) `(+ ,(unparse (cadr e)) ,(unparse (caddr e)))]
+	[(*) `(* ,(unparse (cadr e)) ,(unparse (caddr e)))]
+	[(car) `(car ,(unparse (cadr e)))]
+	[(cdr) `(cdr ,(unparse (cadr e)))]
+	[(cons) `(cons ,(unparse (cadr e)) ,(unparse (caddr e)))]
+	[(var) e]
+	[(intc) e]
+	[(boolc) e]
+	[(fix) `(fix ,(unparse (cadr e)))]
+	[(zero?) `(zero? ,(unparse (cadr e)))]
+	[(if) `(if ,(unparse (cadr e))
+		 ,(unparse (caddr e))
+		 ,(unparse (cadddr e)))]
+	[(lambda) `(lambda ,(cadr e) ,(unparse (caddr e)))]
+	[(app) `(,(unparse (cadr e)) ,(unparse (caddr e)))]))))
+
+(define fix
+  (lambda (f)
+    (letrec ([g (lambda (x) ((f g) x))])
+      g)))
+
+(define !-int
+  (lambda (gamma exp type)
+    (fresh (n)
+      (== `(intc ,n) exp)
+      (== 'int type))))
+
+(define !-+
+  (lambda (gamma exp type)
+    (fresh (n)
+      (== `(+ ,n) exp)
+      (== 'int type))))
+
+(define !-sub1
+  (lambda (gamma exp type)
+    (fresh (n)
+      (== `(sub1 ,n) exp)
+      (== 'int type)
+      (!- gamma n 'int))))
+
+(define !-*
+  (lambda (gamma exp type)
+    (fresh (n)
+      (== `(* ,n) exp)
+      (== 'int type))))
+
+(define !-car
+  (lambda (gamma exp type)
+    (fresh (p)
+      (== `(car ,p) exp)
+      (== 'pair type))))
+
+(define !-cdr
+  (lambda (gamma exp type)
+    (fresh (p)
+      (== `(cdr ,p) exp)
+      (== 'pair type))))
+
+(define !-cons
+  (lambda (gamma exp type)
+    (fresh (p)
+      (== `(cons ,p) exp)
+      (== 'pair type))))
+
+(define !-bool
+  (lambda (gamma exp type)
+    (fresh (b)
+      (== `(boolc ,b) exp)
+      (== 'bool type))))
+
+(define !-zero?
+  (lambda (gamma exp type)
+    (fresh (n)
+      (== `(zero? ,n) exp)
+      (== 'bool type)
+      (!- gamma n 'int))))
+
+(define !-if
+  (lambda (gamma exp type)
+    (fresh (test conseq alt)
+      (== `(if ,test ,conseq ,alt) exp)
+      (!- gamma test 'bool)
+      (!- gamma conseq type)
+      (!- gamma alt type))))
+
+(define !-fix
+  (lambda (gamma exp type)
+    (fresh (rand)
+      (== `(fix ,rand) exp)
+      (!- gamma rand `(-> ,type ,type)))))
+
+(define !-var
+  (lambda (gamma exp type)
+    (fresh (n)
+      (== `(var ,n) exp)
+      (get-type gamma n type))))
+
+(define !-lambda
+  (lambda (gamma exp type)
+    (fresh (n b tn tb gamma^)
+      (== `(lambda (,n) ,b) exp)
+      (== `(-> ,tn ,tb) type)
+      (extend-env gamma n tn gamma^)
+      (!- gamma^ b tb))))
+
+(define !-app
+  (lambda (gamma exp type)
+    (fresh (rator rand tn tb)
+      (== `(app ,rator ,rand) exp)
+      (== tb type)
+      (!- gamma rator `(-> ,tn ,tb))
+      (!- gamma rand tn))))
+
+(define !-
+  (lambda (gamma exp type)
+    (fresh (n m b test tn tb rator rand gamma^)
+      (conde
+        ((!-int gamma exp type))
+        ((!-+ gamma exp type))
+        ((!-* gamma exp type))
+        ((!-sub1 gamma exp type))
+        ((!-car gamma exp type))
+        ((!-cdr gamma exp type))
+        ((!-cons gamma exp type))
+        ((!-bool gamma exp type))
+        ((!-fix gamma exp type))
+        ((!-zero? gamma exp type))        
+        ((!-var gamma exp type))
+        ((!-lambda gamma exp type))        
+        ((!-app gamma exp type))        
+        ((!-if gamma exp type))))))
+
+(define extend-env
+  (lambda (gamma n tn gamma^)
+    (== `((,n . ,tn) . ,gamma) gamma^)))
+
+(define get-type
+  (lambda (gamma n type)
+    (fresh (m t d)
+      (== `((,m . ,t) . ,d) gamma)
+      (conde
+        ((== n m) (== type t))
+        ((never-equalo n m) (get-type d n type))))))
+
+
+(test-check "1"
+  (run* (q) (!- '() '(intc 17) q))
+  '(int))
+
+(test-check "2"
+  (run* (q) (!- '() '(zero? (intc 24)) q))
+  '(bool))
+
+(test-check "3"
+  (run* (q) (!- '() '(zero? (sub1 (intc 24))) q))
+  '(bool))
+
+(test-check "4"
+  (run* (q)
+    (!- '() '(zero? (sub1 (+ (intc 18) (+ (intc 24) (intc 50))))) q))
+  '(bool))
+
+(test-check "5"
+  (run* (q)
+    (!- '() (parse '(lambda (n) (if (zero? n) n n))) q))
+  ' ((-> int int)))
+
+(test-check "6"
+  (run* (q)
+    (!- '() (parse '((lambda (n) (zero? n)) 5)) q))  
+  '(bool))
+
+(test-check "7"
+  (run* (q)
+    (!- '() '(if (zero? (intc 24)) (intc 3) (intc 4)) q))
+  '(int))
+
+(test-check "8"
+  (run* (q)
+    (!- '() '(if (zero? (intc 24)) (zero? (intc 3)) (zero? (intc 4))) q))
+  '(bool))
+
+(test-check "9"
+  (run* (q)
+    (!- '() '(lambda (x) (+ (var x) (intc 5))) q))
+  '((-> int int)))
+
+(test-check "10"
+  (run* (q)
+    (!- '() '(lambda (a) (lambda (x) (+ (var x) (var a)))) q))
+  '((-> int (-> int int))))
+
+(test-check "11"
+  (run* (q)
+    (!- '() (parse '(lambda (f)
+                      (lambda (x)
+                        ((f x) x))))
+      q))
+  '((->
+     (-> _.0 (-> _.0 _.1))
+     (-> _.0 _.1))))
+
+(test-check "12"
+  (run* (q)
+    (!- '() (parse '(+ 4 (* 5 (sub1 6)))) q))
+  '(int))
+
+(test-check "13"
+  (run 1 (q)
+    (fresh (t)
+      (!- '() (parse '(lambda (f) (f f))) t)))
+  '())
+
+(test-check "14"
+  (run* (q)
+    (!- '() (parse '((fix (lambda (!)
+                            (lambda (n)
+                              (if (zero? n)
+                                  1
+                                  (* (! (sub1 n)) n))))) 5))
+        q))
+  '(int))
+
+(test-check "15"
+  (run* (q)
+    (!- '() (parse '(cons 5 4)) q))
+  '((pair int int)))
+
+(test-check "16"
+  (run* (q)
+    (!- '() (parse '(cdr (cons 5 4))) q))
+  '(int))
+
+(test-check "17"
+  (run* (q)
+    (!- '() (parse '(car (cons (cons 3 4) #t))) q))
+  '((pair int int)))
+
+(test-check "18"
+  (run* (q)
+    (!- '() (parse '(car (cdr (cons (cons 3 4) (cons #t #f))))) q))
+  '(bool))
+
+(test-check "19"
+  (run* (q)
+    (!- '() (parse '(cons (cons 3 (cons 5 #t)) (cons #f (cons (cons #t #f) 4)))) q))
+  '((pair (pair int (pair int bool)) (pair bool (pair (pair bool bool) int)))))
+
+(test-check "20"
+  (run* (q)
+    (!- '() (parse '((lambda (l) (car (cdr (cdr l)))) (cons 5 (cons 6 (cons 7 8))))) q))
+  '(int))
+
+(test-check "21"
+  (run* (q)
+    (!- '() (parse '((fix (lambda (sum)
+                            (lambda (n)
+                              (if (zero? n)
+                                  0
+                                  (+ n (sum (sub1 n)))))))
+                     10))
+        q))
+  '(int))
+
+(test-check "22"
+  (run* (q)
+    (!- '() '(app
+              (fix
+                (lambda (sum)
+                  (lambda (n)
+                    (if (if (zero? (var n)) (boolc #t) (boolc #f))
+                        (intc 0)
+                        (+ (var n) (app (var sum) (sub1 (var n))))))))
+              (intc 10))
+        q))
+  '(int))
+
+(test-check "23"
+  (run* (q) 
+    (!- '() (parse
+              '((fix
+                  (car
+                    (cons
+                      (lambda (sum)
+                        (lambda (n)
+                          (+ n (sum (sub1 (* n n))))))
+                      (cdr (cons 3 4)))))
+                10))
+        q))
+  '(int))
+
+(test-check "24"
+  (let ([v (run 20 (q)
+             (fresh (lam a b)
+               (!- '() `(app (,lam (,a) ,b) (intc 5)) 'int)
+               (== `(,lam (,a) ,b) q)))])
+    (pretty-print v)
+    (length v))
+  20)
+
+(test-check "25"
+  (let ([v (run 30 (q)
+             (!- '() q 'int))])
+    (pretty-print v)
+    (length v))
+  30)
+
+(test-check "26"
+  (let ([v (run 30 (q)
+             (!- '() q '(-> int int)))])
+    (pretty-print v)
+    (length v))
+  30)
+
+(test-check "27"
+  (let ([v (run 30 (q)
+             (!- '() q '(-> bool int)))])
+    (pretty-print v)
+    (length v))
+  30)
+
+(test-check "28"
+  (let ([v (run 30 (q)
+             (!- '() q '(-> int (-> int int))))])
+    (pretty-print v)
+    (length v))
+  30)
+
+(test-check "29"
+  (let ([v (run 100 (q)
+             (fresh (e t)
+               (!- '() e t)
+               (== `(,e ,t) q)))])
+    (pretty-print v)
+    (length v))
+  100)
+
+(test-check "30"
+  (let ([v (run 100 (q)
+             (fresh (g e t)
+               (!- g e t)
+               (== `(,g ,e ,t) q)))])
+    (pretty-print v)
+    (length v))
+  100)
+
+(test-check "31"
+  (length
+    (run 100 (q)
+      (fresh (g v)
+        (!- g `(var ,v) 'int)
+        (== `(,g ,v) q))))
+  100)

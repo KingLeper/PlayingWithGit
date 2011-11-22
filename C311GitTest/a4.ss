@@ -1,0 +1,348 @@
+;Alex Manus
+;C311
+;9/29/06
+
+;Pretty sure the interpreters are right, but I have no idea how to
+;prevent the testing procedures from going into an infinite loop, the engine
+;never runs out of fuel so I can only assume it goes into a loop during the
+;initial parsing phase. I have tried to isolate the cause by removing sections
+;of code but to no avail.
+
+;Helpers
+;ENV: PROC
+(define base-env
+  (lambda ()
+    (lambda (x)
+      (error 'base-env "Unbound variable ~s" x))))
+
+(define extend-env
+  (lambda (id val env)
+    (lambda (x)
+      (if (eq? x id)
+          val
+          (apply-env env x)))))
+
+(define apply-env
+  (lambda (env x)
+    (env x)))
+
+;CLOSURE: PROC
+(define apply-proc
+  (lambda (rator rand)
+    (rator rand)))
+
+(define make-closure
+  (lambda (eval-expr)
+    (lambda (id body env)
+      (lambda (a)
+        (eval-expr body (extend-env id a env))))))
+
+
+(define test-let
+  '(let ((x 0))
+     (let ((y x))
+       (begin
+         (set! y 5)
+         x))))
+
+(define test-let-strictness
+  '(let ((y ((lambda (x) (x x)) (lambda (x) (x x)))))
+     3))
+
+(define test-begin
+  '(let ((x 3))
+     (begin
+       (set! x 4)
+       x)))
+
+(define test-cbn
+  '((lambda (f)
+      5)
+    ((lambda (f)
+       (f f))
+     (lambda (f)
+       (f f)))))
+
+(define test-count
+  '((lambda (count)
+      ((lambda (x) (* x x))
+       ((lambda (y)
+          (begin
+            (set! count (* count 2))
+            count))
+        5)))
+    1))
+
+;Macros
+(define-syntax test
+  (syntax-rules ()
+    ((_ title tested-expression expected-result)
+     (let* ((expected expected-result)
+            (produced tested-expression))
+       (if (equal? expected produced)
+           (printf "~s works!\n" title)
+           (error
+            'test
+            "Failed ~s: ~a\nExpected: ~a\nComputed: ~a"
+            title 'tested-expression expected produced))))))
+
+
+(define-syntax test-divergence
+  (syntax-rules ()
+    ((_ title tested-expression)
+     (let ((max-ticks 1000000))
+       (printf "Testing ~s (engine with ~s ticks fuel)\n" title max-ticks)
+       ((make-engine (lambda () tested-expression))
+        max-ticks
+        (lambda (t v)
+	  (error title "infinite loop returned ~s after ~s ticks" v (- max-ticks t)))
+        (lambda (e^) (void)))))))
+
+(define fact-5
+  '((lambda (f)
+      ((f f) 5))
+    (lambda (f)
+      (lambda (n)
+        (if (zero? n)
+            1
+            (* n ((f f) (sub1 n))))))))
+
+
+(define fact-5-let
+  '(let ([f (lambda (f)
+              (lambda (n)
+                (if (zero? n)
+                    1
+                    (* n ((f f) (sub1 n))))))])
+     ((f f) 5)))
+
+(define test-lambda
+  '((lambda (x)
+      ((lambda (y)
+         (begin
+           (set! y 5)
+           x))
+       x))
+    0))
+           
+           
+;1
+(define eval-expr-ref
+  (lambda (expr env)
+    (pmatch expr
+      [,n (or (number? n) (boolean? n)) n]
+      [,x (symbol? x) (let ([b (apply-env env x)]) (unbox b))]
+      [(* ,x1 ,x2) ()
+       (* (eval-expr-ref x1 env)
+          (eval-expr-ref x2 env))]
+      [(sub1 ,x) ()
+       (sub1 (eval-expr-ref x env))]
+      [(zero? ,x) ()
+       (zero? (eval-expr-ref x env))]
+      [(begin ,x1 ,x2) ()
+       (begin
+         (eval-expr-ref x1 env)
+         (eval-expr-ref x2 env))]
+      [(set! ,id ,val) () 
+       (let ([b (apply-env env id)])
+       (let ([answer (eval-expr-ref val env)])
+         (set-box! b answer) 77))]
+      [(if ,test ,conseq ,alt) ()
+       (if (eval-expr-ref test env)
+           (eval-expr-ref conseq env)
+           (eval-expr-ref alt env))]
+      [(let ([,id ,rand]) ,body) ()
+       (let ([rand (pmatch rand
+                     [,x (symbol? x) (apply-env env x)]
+                     [else (let ([rand (eval-expr-name rand env)])
+                             (box (lambda () rand)))])])
+         (eval-expr-name body (extend-env id rand env)))]
+      [(lambda (,id) ,body) ()
+       (closure id body env)]
+      [(,rator ,rand) ()
+       (let ([rator (eval-expr-name rator env)]
+             [rand (pmatch rand
+                     [,x (symbol? x) (apply-env env x)]
+                     [else (box (lambda () (eval-expr-name rand env)))])])
+         (apply-proc rator rand))])))
+
+(define closure (make-closure eval-expr-ref))
+
+(test "eval-expr-ref-fact-5"
+        (eval-expr-ref fact-5 (base-env))
+        120)
+
+(test "eval-expr-ref-fact-5-let"
+  (eval-expr-ref fact-5-let (base-env))
+  120)
+
+(test "eval-expr-ref-test-lambda"
+  (eval-expr-ref test-lambda (base-env))
+  5)
+
+(test "eval-expr-ref-test-let"
+  (eval-expr-ref test-let (base-env))
+  5)
+
+(test-divergence "eval-expr-ref-test-let-strictness"
+  (eval-expr-ref test-let-strictness (base-env)))
+
+(test "eval-expr-ref-test-begin"
+  (eval-expr-ref test-begin (base-env))
+  4)
+
+(test-divergence "eval-expr-ref-test-cbn"
+  (eval-expr-ref test-cbn (base-env)))
+
+(test "eval-expr-ref-test-count"
+  (eval-expr-ref test-count (base-env))
+  4)
+
+
+
+;2
+(define eval-expr-name
+  (lambda (expr env)
+    (pmatch expr
+      [,n (or (number? n) (boolean? n)) n]
+      [,x (symbol? x) (let ([b (apply-env env id)]) (let ([Th (unbox b)]) Th))]
+      [(* ,x1 ,x2) ()
+       (* (eval-expr-name x1 env)
+          (eval-expr-name x2 env))]
+      [(sub1 ,x) ()
+       (sub1 (eval-expr-name x env))]
+      [(zero? ,x) ()
+       (zero? (eval-expr-name x env))]
+      [(begin ,x1 ,x2) ()
+       (begin
+         (eval-expr-name x1 env)
+         (eval-expr-name x2 env))]
+      [(set! ,id ,val) () 
+       (let ([b (apply-env env id)])
+       (let ([answer (eval-expr-name val env)])
+         (set-box! b answer)))]
+      [(if ,test ,conseq ,alt) ()
+       (if (eval-expr-name test env)
+           (eval-expr-name conseq env)
+           (eval-expr-name alt env))]
+
+      [(let ([,id ,rand]) ,body) ()
+       (let ([rand (pmatch rand
+                     [,x (symbol? x) (apply-env env x)]
+                     [else (let ([rand (eval-expr-name rand env)])
+                             (box (lambda () rand)))])])
+         (eval-expr-name body (extend-env id rand env)))]
+      [(lambda (,id) ,body) ()
+       (closure id body env)]
+      [(,rator ,rand) ()
+       (let ([rator (eval-expr-name rator env)]
+             [rand (pmatch rand
+                     [,x (symbol? x) (apply-env env x)]
+                     [else (box (lambda () (eval-expr-name rand env)))])])
+         (apply-proc rator rand))])))
+
+(define closure (make-closure eval-expr-name))           
+
+;3
+(define eval-expr-need
+  (lambda (expr env)
+    (pmatch expr
+      [,n (or (number? n) (boolean? n)) n]
+      [,x (symbol? x) (let ([b (apply-env env id)]) (unbox b))]
+      [(* ,x1 ,x2) ()
+       (* (eval-expr-need x1 env)
+          (eval-expr-need x2 env))]
+      [(sub1 ,x) ()
+       (sub1 (eval-expr-need x env))]
+      [(zero? ,x) ()
+       (zero? (eval-expr-need x env))]
+      [(begin ,x1 ,x2) ()
+       (begin
+         (eval-expr-need x1 env)
+         (eval-expr-need x2 env))]
+      [(set! ,id ,val) () 
+       (let ([b (apply-env env id)])
+       (let ([answer (eval-expr-need val env)])
+         (set-box! b answer)))]
+      [(if ,test ,conseq ,alt) ()
+       (if (eval-expr-need test env)
+           (eval-expr-need conseq env)
+           (eval-expr-need alt env))]
+      [(let ([,id ,rand]) ,body) ()
+       (let ([rand (pmatch rand
+                     [,x (symbol? x) (apply-env env x)]
+                     [else (let ([rand (eval-expr-need rand env)])
+                             (box (lambda () rand)))])])
+         (eval-expr-need body (extend-env id rand env)))]
+      [(lambda (,id) ,body) ()
+       (closure id body env)]
+      [(,rator ,rand) ()
+       (let ([rator (eval-expr-need rator env)]
+             [rand (pmatch rand
+                     [,x (symbol? x) (apply-env env x)]
+                     [else (box (lambda () (eval-expr-need rand env)))])])
+         (apply-proc rator rand))])))
+
+(define closure (make-closure eval-expr-need))
+           
+(test "eval-expr-need-fact-5"
+  (eval-expr-need fact-5 (base-env))
+  120)
+
+(test "eval-expr-need-fact-5-let"
+  (eval-expr-need fact-5-let (base-env))
+  120)
+
+(test "eval-expr-need-test-lambda"
+  (eval-expr-need test-lambda (base-env))
+  5)
+
+(test "eval-expr-need-test-let"
+  (eval-expr-need test-let (base-env))
+  5)
+
+(test-divergence "eval-expr-need-test-let-strictness"
+  (eval-expr-need test-let-strictness (base-env)))
+
+(test "eval-expr-need-test-cbn"
+  (eval-expr-need test-cbn (base-env))
+  5)
+
+(test "eval-expr-need-test-count"
+  (eval-expr-need test-count (base-env))
+  4)
+
+           
+(test "eval-expr-name-fact-5"
+  (eval-expr-name fact-5 (base-env))
+  120)
+
+(test "eval-expr-name-fact-5-let"
+  (eval-expr-name fact-5-let (base-env))
+  120)
+
+(test "eval-expr-name-test-lambda"
+  (eval-expr-name test-lambda (base-env))
+  5)
+
+(test "eval-expr-name-test-let"
+  (eval-expr-name test-let (base-env))
+  5)
+
+(test-divergence "eval-expr-name-test-let-strictness"
+  (eval-expr-name test-let-strictness (base-env)))
+
+(test "eval-expr-name-test-cbn"
+  (eval-expr-name test-cbn (base-env))
+  5)
+
+(test "eval-expr-name-test-count"
+  (eval-expr-name test-count (base-env))
+  8)
+
+     
+           
+
+
+
+;END
